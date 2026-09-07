@@ -7,6 +7,9 @@ import com.luftnos.unplayplay.PCdm.playPlayResponse
 import com.luftnos.unplayplay.Unplayplay
 import dev.brahmkshatriya.echo.common.helpers.ContinuationCallback.Companion.await
 import dev.brahmkshatriya.echo.extension.spotify.Json
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -33,24 +36,41 @@ class ADSpotifyExtension : SpotifyExtension() {
 
     private val client = OkHttpClient.Builder().build()
 
-    override suspend fun getKey(json: Json, accessToken: String, fileId: String): ByteArray {
-        val request = Request.Builder()
-        request.url(Unplayplay.getPlayPlayUrl(fileId))
-        request.addHeader("Authorization", "Bearer $accessToken")
-        request.post(playPlayRequest(Unplayplay.token).toRequestBody())
-        val raw = client.newCall(request.build()).await()
-        if (!raw.isSuccessful) throw Exception("Error ${raw.code}: ${raw.message}")
-        val hex = playPlayResponse(raw.body.bytes()).toHexString()
-        val req = Request.Builder().url("https://another-unplayplay-server.fly.dev/getAesKey")
-            .post(json.encode(buildJsonObject {
-                put("obfuscatedKey", hex)
-                put("encoding", "hex")
-            }).toRequestBody("application/json; charset=utf-8".toMediaType())).build()
-        val jsonReq = client.newCall(req).execute()
-        val body = jsonReq.body.string()
-        val key = json.decode<JsonObject>(body).jsonObject["aesKey"]?.jsonPrimitive?.content
-            ?: throw Exception("Couldn't get decryption key")
-        return key.hexToBytes()
+    override suspend fun getKeyWithPlayPlay(json: Json, accessToken: String, fileId: String): ByteArray {
+        return withContext(Dispatchers.IO) {
+            // Retry logic for PlayPlay/unplayplay server (up to 3 attempts with exponential backoff)
+            var lastException: Exception? = null
+            repeat(3) { attempt ->
+                try {
+                    val request = Request.Builder()
+                    request.url(Unplayplay.getPlayPlayUrl(fileId))
+                    request.addHeader("Authorization", "Bearer $accessToken")
+                    request.post(playPlayRequest(Unplayplay.token).toRequestBody())
+                    val raw = client.newCall(request.build()).await()
+                    if (!raw.isSuccessful) {
+                        throw Exception("Error ${raw.code}: ${raw.message}")
+                    }
+                    val hex = playPlayResponse(raw.body.bytes()).toHexString()
+                    val req = Request.Builder().url("https://another-unplayplay-server.fly.dev/getAesKey")
+                        .post(json.encode(buildJsonObject {
+                            put("obfuscatedKey", hex)
+                            put("encoding", "hex")
+                        }).toRequestBody("application/json; charset=utf-8".toMediaType())).build()
+                    val jsonReq = client.newCall(req).execute()
+                    val body = jsonReq.body.string()
+                    val key = json.decode<JsonObject>(body).jsonObject["aesKey"]?.jsonPrimitive?.content
+                        ?: throw Exception("Couldn't get decryption key")
+                    return@withContext key.hexToBytes()
+                } catch (e: Exception) {
+                    lastException = e
+                    if (attempt < 2) {
+                        // Exponential backoff: 1s, 2s
+                        delay((attempt + 1) * 1000L)
+                    }
+                }
+            }
+            throw lastException ?: Exception("Failed to get decryption key after retries")
+        }
     }
 
     fun String.hexToBytes(): ByteArray {

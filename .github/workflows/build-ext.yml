@@ -1,0 +1,32 @@
+name: build-ext
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-ext:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+          cache: 'gradle'
+
+      - name: Build ext module
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :ext:compileKotlin --no-daemon
+
+      - name: Upload ext artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ext-classes
+          path: ext/build/classes/

@@ -49,6 +49,7 @@ import dev.brahmkshatriya.echo.extension.spotify.AudioFormat.OGG_VORBIS_160
 import dev.brahmkshatriya.echo.extension.spotify.AudioFormat.OGG_VORBIS_320
 import dev.brahmkshatriya.echo.extension.spotify.AudioFormat.OGG_VORBIS_96
 import dev.brahmkshatriya.echo.extension.spotify.Json
+import dev.brahmkshatriya.echo.extension.spotify.mercury.MercuryConnection
 import dev.brahmkshatriya.echo.extension.spotify.Queries
 import dev.brahmkshatriya.echo.extension.spotify.SpotifyApi
 import dev.brahmkshatriya.echo.extension.spotify.WebPlayerConfig
@@ -670,11 +671,42 @@ open class SpotifyExtension : ExtensionClient, LoginClient.WebView,
     open suspend fun getKey(json: Json, accessToken: String, fileId: String): ByteArray =
         throw IllegalStateException()
 
+    /**
+     * Gets the AES decryption key using the Mercury protocol (local, no third-party server).
+     * Falls back to the PlayPlay/unplayplay approach if Mercury fails.
+     */
+    protected suspend fun getKeyWithMercury(
+        json: Json,
+        accessToken: String,
+        fileId: String,
+        gid: String?,
+    ): ByteArray {
+        if (gid.isNullOrBlank()) return getKeyWithPlayPlay(json, accessToken, fileId)
+
+        // Try Mercury protocol first (local, no third-party server)
+        return try {
+            val storedToken = api.app.getMercuryToken(accessToken)
+            MercuryConnection.getAudioKey(storedToken, gid, fileId)
+        } catch (e: Exception) {
+            // Fallback to PlayPlay/unplayplay approach
+            getKeyWithPlayPlay(json, accessToken, fileId)
+        }
+    }
+
+    /**
+     * Gets the AES decryption key using the PlayPlay/unplayplay third-party server.
+     * This is the original implementation that depends on unplayplay server.
+     */
+    protected suspend fun getKeyWithPlayPlay(json: Json, accessToken: String, fileId: String): ByteArray {
+        // This will be overridden by ADSpotifyExtension with the actual unplayplay implementation
+        throw IllegalStateException("PlayPlay key retrieval not implemented")
+    }
+
     private suspend fun oggStream(format: String, streamable: Streamable): Streamable.Media {
         val fileId = streamable.id
         val url = queries.storageResolve(format, fileId).json.cdnUrl.first()
         val accessToken = api.getWebAccessToken()
-        val key = getKey(api.json, accessToken, fileId)
+        val key = getKeyWithMercury(api.json, accessToken, fileId, streamable.extras["gid"])
         return Streamable.InputProvider { position, length ->
             decryptFromPosition(format, key, AUDIO_IV, position, length) { pos, len ->
                 val range = "bytes=$pos-${len?.toString() ?: ""}"

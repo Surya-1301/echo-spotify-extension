@@ -24,6 +24,7 @@ class SpotifyApi {
 
     private val webMutex = Mutex()
     val web = TokenManagerDesktop(this)
+    val app by lazy { TokenManagerApp(this) }
 
     @Volatile var settings: Settings? = null
     private var cachedDeviceId: String? = null
