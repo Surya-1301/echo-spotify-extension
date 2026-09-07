@@ -49,10 +49,6 @@ jobs:
           name: Spotify Extension
           body_path: commit.txt
           files: ${{ env.APP_PATH }}
-          tag_name: ${{ env.VERSION }}
-          body_path: commit.txt
-          name: ${{ env.VERSION }}
-          files: ${{ env.APP_PATH }}
 
       - name: Delete Old Releases
         uses: sgpublic/delete-release-action@master
