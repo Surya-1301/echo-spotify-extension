@@ -33,7 +33,26 @@ jobs:
       - name: Build with Gradle
         run: |
           ./gradlew assembleRelease --no-daemon
-          cp app/build/outputs/apk/release/app-release.apk ${{ env.APP_PATH }}
+
+      - name: Sign APK
+        run: |
+          # Generate a debug signing key
+          keytool -genkeypair -v \
+            -keystore /tmp/debug.jks \
+            -alias debug \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=Debug,O=Debug,C=US"
+          # Determine source APK (release built, may be signed or unsigned)
+          APK_SRC=$(ls app/build/outputs/apk/release/app-release*.apk | head -1)
+          echo "Signing source APK: $APK_SRC"
+          # Sign with jarsigner
+          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
+            -keystore /tmp/debug.jks \
+            -storepass android \
+            "$APK_SRC" debug
+          # Copy to the .eapk output path
+          cp "$APK_SRC" ${{ env.APP_PATH }}
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
