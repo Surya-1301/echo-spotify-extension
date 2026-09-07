@@ -28,25 +28,11 @@ jobs:
           version=$( echo ${{ github.event.head_commit.id }} | cut -c1-7 )
           echo "VERSION=v$version" >> $GITHUB_ENV
           echo "APP_PATH=app/build/${{ env.TAG }}-$version.eapk" >> $GITHUB_ENV
-          echo "${{ secrets.KEYSTORE_B64 }}" | base64 -d > $GITHUB_WORKSPACE/signing-key.jks
           chmod +x ./gradlew
-
-      - name: Download Dependency
-        shell: bash
-        env:
-          DEPENDENCY_URL: ${{ secrets.DEPENDENCY_URL }}
-        run: |
-          mkdir -p app/libs
-          curl -L -o app/libs/unplayplay.aar ${{ env.DEPENDENCY_URL }}
 
       - name: Build with Gradle
         run: |
-          ./gradlew assembleRelease \
-          -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/signing-key.jks \
-          -Pandroid.injected.signing.store.password=${{ secrets.PASSWORD }} \
-          -Pandroid.injected.signing.key.alias=key0 \
-          -Pandroid.injected.signing.key.password=${{ secrets.PASSWORD }}
-          
+          ./gradlew assembleRelease --no-daemon
           cp app/build/outputs/apk/release/app-release.apk ${{ env.APP_PATH }}
 
       - name: Upload APK
@@ -55,9 +41,14 @@ jobs:
           path: ${{ env.APP_PATH }}
 
       - name: Create Release
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           make_latest: true
+          tag_name: ${{ env.VERSION }}
+          name: Spotify Extension
+          body_path: commit.txt
+          files: ${{ env.APP_PATH }}
           tag_name: ${{ env.VERSION }}
           body_path: commit.txt
           name: ${{ env.VERSION }}
