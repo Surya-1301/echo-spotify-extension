@@ -19,12 +19,14 @@ import spotify.extendedmetadata.metadata.ExtendedMetadataProto.BatchedExtensionR
 import java.net.URLEncoder
 import java.security.SecureRandom
 
-class SpotifyApi {
+class SpotifyApi(filesDir: java.io.File = java.io.File("spotify")) {
     val json = Json()
 
     private val webMutex = Mutex()
     val web = TokenManagerDesktop(this)
     val app by lazy { TokenManagerApp(this) }
+
+    val filesDir: java.io.File = filesDir
 
     @Volatile var settings: Settings? = null
     private var cachedDeviceId: String? = null

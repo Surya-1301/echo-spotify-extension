@@ -105,7 +105,7 @@ open class SpotifyExtension : ExtensionClient, LoginClient.WebView,
     }
 
     open val filesDir = File("spotify")
-    val api by lazy { SpotifyApi() }
+    val api by lazy { SpotifyApi(filesDir) }
     val queries by lazy { Queries(api) }
 
     override val webViewRequest = object : WebViewRequest.Cookie<List<User>> {
