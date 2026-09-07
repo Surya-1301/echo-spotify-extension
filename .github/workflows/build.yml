@@ -80,28 +80,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload APK to Discord
-        shell: bash
-        env:
-          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-        run: |
-          commit=$(jq -Rsa . <<< "${{ github.event.head_commit.message }}"  | tail -c +2 | head -c -2)
-          message=$(echo "@everyone **${{ env.VERSION }}**\n$commit")
-          curl -F "payload_json={\"content\":\"${message}\"}" \
-          -F "file=@${{ env.APP_PATH }}" \
-          ${{ env.WEBHOOK }}
-
-      - name: Upload APK to Telegram
-        shell: bash
-        env:
-          BOT_ID: ${{ secrets.TELEGRAM_BOT_ID }}
-          CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
-          THREAD_ID: ${{ secrets.TELEGRAM_THREAD_ID }}
-        run: |
-          message=$(echo -e "${{ env.NAME }}\n$(echo -e "${{ github.event.head_commit.message }}" | sed 's/[~>|.!+-=#]/\\&/g')")
-          curl -F "chat_id=${{ env.CHANNEL_ID }}" \
-          -F "message_thread_id=${{ env.THREAD_ID }}" \
-          -F "document=@${{ env.APP_PATH }}" \
-          -F "caption=${message}" \
-          -F "parse_mode=MarkdownV2" \
-          https://api.telegram.org/bot${{ env.BOT_ID }}/sendDocument
+      # Discord/Telegram upload steps removed — configure secrets to re-enable
