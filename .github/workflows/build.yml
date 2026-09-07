@@ -29,37 +29,34 @@ jobs:
           echo -e "## ${{ env.NAME }}\n${{ github.event.head_commit.message }}" > commit.txt
           version=$( echo ${{ github.event.head_commit.id }} | cut -c1-7 )
           echo "VERSION=v$version" >> $GITHUB_ENV
-          echo "APP_PATH=app/build/${{ env.TAG }}-$version.eapk" >> $GITHUB_ENV
+          echo "APP_PATH=app/build/outputs/apk/release/app-release.apk" >> $GITHUB_ENV
+          echo "FINAL_PATH=${{ env.TAG }}-$version.eapk" >> $GITHUB_ENV
           chmod +x ./gradlew
 
-      - name: Build with Gradle
+      - name: Generate signing keystore
         run: |
-          ./gradlew assembleRelease --no-daemon
-
-      - name: Sign APK
-        run: |
-          # Generate a debug signing key
           keytool -genkeypair -v \
-            -keystore /tmp/debug.jks \
-            -alias debug \
+            -keystore /tmp/release.jks \
+            -alias release \
             -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass android -keypass android \
-            -dname "CN=Debug,O=Debug,C=US"
-          # Determine source APK (release built, may be signed or unsigned)
-          APK_SRC=$(ls app/build/outputs/apk/release/app-release*.apk | head -1)
-          echo "Signing source APK: $APK_SRC"
-          # Sign with jarsigner
-          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
-            -keystore /tmp/debug.jks \
-            -storepass android \
-            "$APK_SRC" debug
-          # Copy to the .eapk output path
-          cp "$APK_SRC" ${{ env.APP_PATH }}
+            -dname "CN=Spotify Extension,O=Echo,C=US"
+          echo "KEYSTORE_PATH=/tmp/release.jks" >> $GITHUB_ENV
+          echo "KEYSTORE_PASSWORD=android" >> $GITHUB_ENV
+          echo "KEY_ALIAS=release" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=android" >> $GITHUB_ENV
+
+      - name: Build with Gradle
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Package APK
+        run: cp ${{ env.APP_PATH }} ${{ env.FINAL_PATH }}
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ env.APP_PATH }}
+          name: ${{ env.FINAL_PATH }}
+          path: ${{ env.FINAL_PATH }}
 
       - name: Create Release
         if: github.ref == 'refs/heads/main'
@@ -69,7 +66,7 @@ jobs:
           tag_name: ${{ env.VERSION }}
           name: Spotify Extension
           body_path: commit.txt
-          files: ${{ env.APP_PATH }}
+          files: ${{ env.FINAL_PATH }}
 
       - name: Delete Old Releases
         uses: sgpublic/delete-release-action@master
